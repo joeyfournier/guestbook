@@ -28,6 +28,7 @@ import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
 import javax.xml.xpath.XPathFactory;
 
+import org.apache.commons.lang.StringEscapeUtils;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.xml.sax.SAXException;
@@ -91,7 +92,7 @@ public class HandleAppDirectServlet extends HttpServlet {
 	
 	// error codes
 	private static final String ERROR_CODE_USER_ALREADY_EXISTS = "USER_ALREADY_EXISTS";
-	private static final String ERROR_CODE_INVALID_RESPONSE = "INVALID_RESPOSNE";
+	private static final String ERROR_CODE_INVALID_RESPONSE = "INVALID_RESPONSE";
 	private static final String ERROR_CODE_USER_NOT_FOUND = "USER_NOT_FOUND";
 	private static final String ERROR_CODE_ACCOUNT_NOT_FOUND = "ACCOUNT_NOT_FOUND"; 
 	private static final String ERROR_CODE_UNKNOWN_ERROR = "UNKNOWN_ERROR";
@@ -122,7 +123,7 @@ public class HandleAppDirectServlet extends HttpServlet {
 				{
 					System.out.println("Unable to obtain valid xml from attempted signed fetch on eventUrl: "+eventUrl);
 					sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE,
-							"Unable to obtain valid xml eventUrl: "+eventUrl);	
+							"Unable to obtain valid xml from eventUrl: "+eventUrl);	
 					return;
 				}
 				
@@ -207,6 +208,8 @@ public class HandleAppDirectServlet extends HttpServlet {
 
 		com.example.guestbook.model.userAssign.EventType event = validateAccessEventXml(resp,dDoc);
 		
+		if (event==null) return;
+		
 		// deal with flag, true response means a valid error is returned and we can stop processing
 		if (handleNonSubscriptionOrderFlag(resp, event.getFlag())) return;
 		
@@ -256,9 +259,10 @@ public class HandleAppDirectServlet extends HttpServlet {
 		
 		System.out.println("handleUserAssign...");
 		
-		
 		com.example.guestbook.model.userAssign.EventType event = validateAccessEventXml(resp,dDoc);
-
+		
+		if (event==null) return;
+		
 		// deal with flag
 		handleNonSubscriptionOrderFlag(resp, event.getFlag());
 		
@@ -332,7 +336,8 @@ public class HandleAppDirectServlet extends HttpServlet {
 			
 		} catch (JAXBException e) {
 			e.printStackTrace();
-			sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE, "XML not formatted correctly for User Assign. Exception message: "+e.getMessage());
+			System.out.println("XML not formatted correctly for User Assign. Exception message: "+StringEscapeUtils.escapeXml(e.getMessage()));
+			sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE, "XML not formatted correctly for User Assign. Exception message: "+StringEscapeUtils.escapeXml(e.getMessage()));
 		}
 		return event;
 	}
@@ -394,6 +399,8 @@ public class HandleAppDirectServlet extends HttpServlet {
 		
 		// validate Notice xml
 		com.example.guestbook.model.subNotice.EventType event = validateNoticeXml( resp,  dDoc, "Notice");
+		
+		if (event==null) return;
 		
 		// deal with flag
 		if (handleNonSubscriptionOrderFlag(resp, event.getFlag())) return;
@@ -503,7 +510,7 @@ public class HandleAppDirectServlet extends HttpServlet {
 			
 		} catch (JAXBException e) {
 			e.printStackTrace();
-			sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE, "XML not formatted correctly for Subscription  "+action+". Exception message: "+e.getMessage());
+			sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE, "XML not formatted correctly for Subscription  "+action+". Exception message: "+StringEscapeUtils.escapeXml(e.getMessage()));
 			return null;
 		}
 		
@@ -537,6 +544,8 @@ public class HandleAppDirectServlet extends HttpServlet {
 		Subscription sub = null;
 
 		com.example.guestbook.model.subChange.EventType event  = validateOrderUpdateXml(resp, dDoc,"Cancel");
+		
+		if (event==null) return;
 		
 		handleNonSubscriptionOrderFlag(resp, event.getFlag());
 		
@@ -712,6 +721,12 @@ public class HandleAppDirectServlet extends HttpServlet {
 		// sign the eventUrl to obtain xml for event
 		HttpURLConnection signedFetch = signRequest(eventUrl);
 
+		if (signedFetch == null)
+		{
+			System.out.println("Unable to process eventUrl to get valid xml: "+ eventUrl);
+			return null;
+		}
+		
 		/*
 		 * uncomment to hack out signing 
 		 * URL url = new URL(eventUrl); 
@@ -763,6 +778,8 @@ public class HandleAppDirectServlet extends HttpServlet {
 		Subscription sub = null;
 
 		com.example.guestbook.model.subChange.EventType event  = validateOrderUpdateXml(resp, dDoc,"Change");
+		
+		if (event==null) return;
 		
 		handleNonSubscriptionOrderFlag(resp, event.getFlag());
 		
@@ -874,9 +891,11 @@ public class HandleAppDirectServlet extends HttpServlet {
 
 		} catch (JAXBException e) {
 			e.printStackTrace();
+			System.out.println("XML not formatted correctly for Subscription  " + action + ". Exception message: "
+							+ StringEscapeUtils.escapeXml(e.getMessage()));
 			sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE,
 					"XML not formatted correctly for Subscription  " + action + ". Exception message: "
-							+ e.getMessage());
+							+ StringEscapeUtils.escapeXml(e.getMessage()));
 			return null;
 		}
 
@@ -919,7 +938,8 @@ public class HandleAppDirectServlet extends HttpServlet {
 			
 		} catch (JAXBException e) {
 			e.printStackTrace();
-			sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE, "XML not formatted correctly for Subscription Order. Exception message: "+e.getMessage());
+			System.out.println("XML not formatted correctly for Subscription Order. Exception message: "+StringEscapeUtils.escapeXml(e.getMessage()));
+			sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE, "XML not formatted correctly for Subscription Order. Exception message: "+StringEscapeUtils.escapeXml(e.getMessage()));
 			return null;
 		}
 				
@@ -947,11 +967,7 @@ public class HandleAppDirectServlet extends HttpServlet {
 		
 		event = validateOrderXml( resp, dDoc);
 			
-		if (event==null){
-			log("Invalid xml document in createSubscriptionFromXml, no event found!");
-			sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE, "Empty event from xml.");
-			return null;
-		}
+		if (event==null) return null;
 		
 		String flag = event.getFlag();
 		// check and handle flag, NOTE FOR TESTING, we are accepting stateless... uncomment below to ignore stateless
