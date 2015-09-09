@@ -9,6 +9,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+import javax.servlet.ServletConfig;
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -27,7 +29,12 @@ import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathFactory;
 
+import org.apache.commons.configuration.Configuration;
+import org.apache.commons.configuration.ConfigurationException;
+import org.apache.commons.configuration.PropertiesConfiguration;
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.commons.lang.StringUtils;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
@@ -41,8 +48,6 @@ import com.example.guestbook.model.Order;
 import com.example.guestbook.model.Person;
 import com.example.guestbook.model.Subscription;
 import com.example.guestbook.model.User;
-import com.example.guestbook.model.subOrder.CompanyType;
-import com.example.guestbook.model.subOrder.EventType;
 
 import com.googlecode.objectify.ObjectifyService;
 
@@ -74,15 +79,8 @@ public class HandleAppDirectServlet extends HttpServlet {
 	final Logger logger = LoggerFactory.getLogger(HandleAppDirectServlet.class);
 			
 	// constants
-	public static final String HEADER_NAME_AUTHORIZATION = "Authorization";
-	public static final String HEADER_SUBSTRING_OAUTH_SIGNATURE = "oauth_signature";
 	public static final String PARAM_ACTION = "action";
 	public static final String PARAM_EVENT_URL = "eUrl";
-	// TODO: make these property driven
-	//public static String OAUTH_CONSUMER_KEY = "guestbook-37250";
-	//public static String OAUTH_CONSUMER_SECRET = "OmCQiBRVlL32Htck";
-	public static final String OAUTH_CONSUMER_KEY = "guestbookmultiuser-37800";
-	public static final String OAUTH_CONSUMER_SECRET = "3VwNspPyNMbu";
 	
 	// Notices
 	public static final String NOTICE_DEACTIVATED = "DEACTIVATED";
@@ -102,8 +100,44 @@ public class HandleAppDirectServlet extends HttpServlet {
 	private static final String ERROR_CODE_ACCOUNT_NOT_FOUND = "ACCOUNT_NOT_FOUND"; 
 	private static final String ERROR_CODE_UNKNOWN_ERROR = "UNKNOWN_ERROR";
 	
+	// config file path
+	private static final String CONFIG_FILE_PATH = "WEB-INF/HandleAppDirectServlet.properties";
+	
+	// These values should be set by properties
+	public static final  String OAUTH_CONSUMER_KEY_DEFAULT = "dummy";
+	public static final  String OAUTH_CONSUMER_SECRET_DEFAULT = "dummy";
+	public static  String OAUTH_CONSUMER_KEY = OAUTH_CONSUMER_KEY_DEFAULT;
+	public static  String OAUTH_CONSUMER_SECRET = OAUTH_CONSUMER_SECRET_DEFAULT;
+	
+	/**
+	 * {@inheritDoc}
+	 */
+	public void init(ServletConfig config) throws ServletException {
+		super.init(config);
 			
+		Configuration propertiesConfig;
+		try {	
+			/* read properties file */
+			propertiesConfig = new PropertiesConfiguration(CONFIG_FILE_PATH);
+			
+			String oauthConsumerKey = propertiesConfig.getString("oauth.consumer.key");
+			OAUTH_CONSUMER_KEY = setConfig(oauthConsumerKey, OAUTH_CONSUMER_KEY_DEFAULT);
+			String oauthConsumerSecret = propertiesConfig.getString("oauth.consumer.secret");
+			OAUTH_CONSUMER_SECRET = setConfig(oauthConsumerSecret, OAUTH_CONSUMER_SECRET_DEFAULT);
+		} catch (ConfigurationException e1) {
+			logger.warn("Unable to readconfiguation file {}, using defaults.");
+			e1.printStackTrace();
+		}
+	
+	}
+	
+	private String setConfig(String setTo, String defaultVal)
+	{
+		return (StringUtils.isNotEmpty(setTo)) ? setTo : defaultVal;
 
+	}
+	
+	
 	@Override
 	public void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
 		
@@ -361,7 +395,6 @@ public class HandleAppDirectServlet extends HttpServlet {
 	private Subscription accessManagementValidate(HttpServletResponse resp, String accountId, String userId, String action) throws IOException
 	{
 		Subscription sub = null;
-
 		logger.info("accessManagementValidate... for accountId {}",accountId);
 
 		// make sure accountId is not null
@@ -370,7 +403,6 @@ public class HandleAppDirectServlet extends HttpServlet {
 		if (isNullError (userId, "user id",action,resp)) return null;
 
 		// we have openid and account id, get the subscription for the account
-
 		// obtain subscription
 		sub = getSubScriptionForAccountId(resp, accountId, action);
 		
@@ -1098,7 +1130,7 @@ public class HandleAppDirectServlet extends HttpServlet {
 	 * @param subscription event object
 	 * @return accountId
 	 */
-	private String generateNewAccountId(EventType event) {
+	private String generateNewAccountId(com.example.guestbook.model.subOrder.EventType event) {
 		String accountId = null;
 		// below would generate a unique id prefixed by company name (unlimited subscriptions)
 		//accountId = event.getPayload().getCompany().getName() + generateUUID().toString();
