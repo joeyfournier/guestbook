@@ -16,8 +16,6 @@ import javax.servlet.http.HttpSession;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.math.NumberUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.openid4java.OpenIDException;
 import org.openid4java.association.AssociationSessionType;
 import org.openid4java.consumer.ConsumerManager;
@@ -39,6 +37,8 @@ import org.openid4java.message.sreg.SRegRequest;
 import org.openid4java.message.sreg.SRegResponse;
 import org.openid4java.util.HttpClientFactory;
 import org.openid4java.util.ProxyProperties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.example.guestbook.model.Subscription;
 import com.googlecode.objectify.ObjectifyService;
@@ -57,7 +57,9 @@ public class ConsumerServlet extends javax.servlet.http.HttpServlet {
 	private static final long serialVersionUID = -5998885243419513055L;
 	private static final String OPTIONAL_VALUE = "0";
 	private static final String REQUIRED_VALUE = "1";
-	private static final Log LOG = LogFactory.getLog(ConsumerServlet.class);
+	// logger
+	final Logger LOG = LoggerFactory.getLogger(HandleAppDirectServlet.class);
+	//private static final Log LOG = LogFactory.getLog(ConsumerServlet.class);
 
 	private ServletContext context;
 	private ConsumerManager manager;
@@ -70,12 +72,12 @@ public class ConsumerServlet extends javax.servlet.http.HttpServlet {
 
 		context = config.getServletContext();
 
-		LOG.debug("context: " + context);
+		LOG.debug("context: {}",context);
 
 		// --- Forward proxy setup (only if needed) ---
 		ProxyProperties proxyProps = getProxyProperties(config);
 		if (proxyProps != null) {
-			LOG.debug("ProxyProperties: " + proxyProps);
+			LOG.debug("ProxyProperties: {}", proxyProps);
 			HttpClientFactory.setProxyProperties(proxyProps);
 		}
 
@@ -115,7 +117,7 @@ public class ConsumerServlet extends javax.servlet.http.HttpServlet {
 	private void processReturn(HttpServletRequest req, HttpServletResponse resp)
 			throws ServletException, IOException {
 		Identifier identifier = this.verifyResponse(req);
-		LOG.debug("identifier: " + identifier);
+		LOG.debug("identifier: {}", identifier);
 		if (identifier == null) {
 			// keep sending back to main page, should have link to login via appDirect
 			this.getServletContext().getRequestDispatcher("/guestbook.jsp")
@@ -395,7 +397,7 @@ public class ConsumerServlet extends javax.servlet.http.HttpServlet {
 	private static ProxyProperties getProxyProperties(ServletConfig config) {
 		ProxyProperties proxyProps;
 		String host = config.getInitParameter("proxy.host");
-		LOG.debug("proxy.host: " + host);
+		//LOG.debug("proxy.host: {}" , host);
 		if (host == null) {
 			proxyProps = null;
 		} else {
