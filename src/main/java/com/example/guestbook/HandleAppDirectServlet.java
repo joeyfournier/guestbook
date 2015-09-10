@@ -3,7 +3,6 @@ package com.example.guestbook;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
@@ -33,8 +32,6 @@ import org.apache.commons.configuration.Configuration;
 import org.apache.commons.configuration.ConfigurationException;
 import org.apache.commons.configuration.PropertiesConfiguration;
 import org.apache.commons.lang.StringEscapeUtils;
-import org.apache.commons.lang.StringUtils;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
@@ -48,14 +45,11 @@ import com.example.guestbook.model.Order;
 import com.example.guestbook.model.Person;
 import com.example.guestbook.model.Subscription;
 import com.example.guestbook.model.User;
-
 import com.googlecode.objectify.ObjectifyService;
 
 import oauth.signpost.OAuthConsumer;
 import oauth.signpost.basic.DefaultOAuthConsumer;
-import oauth.signpost.exception.OAuthCommunicationException;
-import oauth.signpost.exception.OAuthExpectationFailedException;
-import oauth.signpost.exception.OAuthMessageSignerException;
+
 
 
 
@@ -79,20 +73,26 @@ public class HandleAppDirectServlet extends HttpServlet {
 	final Logger logger = LoggerFactory.getLogger(HandleAppDirectServlet.class);
 			
 	// constants
+	
+	// parameter names
 	public static final String PARAM_ACTION = "action";
 	public static final String PARAM_EVENT_URL = "eUrl";
-	
+	// event types
+	public static final String EVENT_TYPE_SUB_ORDER = "SUBSCRIPTION_ORDER";
+	public static final String EVENT_TYPE_SUB_CHANGE = "SUBSCRIPTION_CHANGE";
+	public static final String EVENT_TYPE_SUB_CANCEL = "SUBSCRIPTION_CANCEL";
+	public static final String EVENT_TYPE_SUB_NOTICE = "SUBSCRIPTION_NOTICE";
+	public static final String EVENT_TYPE_USER_ASSIGN = "USER_ASSIGNMENT";
+	public static final String EVENT_TYPE_USER_UNASSIGN = "USER_UNASSIGNMENT";
 	// Notices
 	public static final String NOTICE_DEACTIVATED = "DEACTIVATED";
 	public static final String NOTICE_REACTIVATED ="REACTIVATED";
 	public static final String NOTICE_CLOSED = "CLOSED";
 	public static final String NOTICE_UPCOMING_INVOICE = "UPCOMING_INVOICE";
-	 
 	// subscription statuses
 	public static final String STATUS_ACTIVE = "active";
 	public static final String STATUS_DEACTIVATED = "deactivated";
 	public static final String STATUS_CANCELED = "canceled";
-	
 	// error codes
 	private static final String ERROR_CODE_USER_ALREADY_EXISTS = "USER_ALREADY_EXISTS";
 	private static final String ERROR_CODE_INVALID_RESPONSE = "INVALID_RESPONSE";
@@ -102,126 +102,114 @@ public class HandleAppDirectServlet extends HttpServlet {
 	
 	// config file path
 	private static final String CONFIG_FILE_PATH = "WEB-INF/HandleAppDirectServlet.properties";
-	
-	// These values should be set by properties
+	// These values can/should be set by properties in CONFIG_FILE_PATH
 	public static final  String OAUTH_CONSUMER_KEY_DEFAULT = "dummy";
 	public static final  String OAUTH_CONSUMER_SECRET_DEFAULT = "dummy";
-	public static  String OAUTH_CONSUMER_KEY = OAUTH_CONSUMER_KEY_DEFAULT;
-	public static  String OAUTH_CONSUMER_SECRET = OAUTH_CONSUMER_SECRET_DEFAULT;
+	public static  String oauthConsumerKey = OAUTH_CONSUMER_KEY_DEFAULT;
+	public static  String oauthConsumerSecret = OAUTH_CONSUMER_SECRET_DEFAULT;
+	// can be set in properties to process Stateless events (for testing)
+	public static boolean processStatelessFlag = false;
+	
 	
 	/**
-	 * {@inheritDoc}
+	 * Initializes properties {@inheritDoc}
 	 */
 	public void init(ServletConfig config) throws ServletException {
 		super.init(config);
-			
+
 		Configuration propertiesConfig;
-		try {	
+		try {
 			/* read properties file */
 			propertiesConfig = new PropertiesConfiguration(CONFIG_FILE_PATH);
-			
-			String oauthConsumerKey = propertiesConfig.getString("oauth.consumer.key");
-			OAUTH_CONSUMER_KEY = setConfig(oauthConsumerKey, OAUTH_CONSUMER_KEY_DEFAULT);
-			String oauthConsumerSecret = propertiesConfig.getString("oauth.consumer.secret");
-			OAUTH_CONSUMER_SECRET = setConfig(oauthConsumerSecret, OAUTH_CONSUMER_SECRET_DEFAULT);
+			oauthConsumerKey = propertiesConfig.getString("oauth.consumer.key", OAUTH_CONSUMER_KEY_DEFAULT);
+			oauthConsumerSecret = propertiesConfig.getString("oauth.consumer.secret", OAUTH_CONSUMER_SECRET_DEFAULT);
+			processStatelessFlag = propertiesConfig.getBoolean("process.stateless.flag", false);
 		} catch (ConfigurationException e1) {
 			logger.warn("Unable to readconfiguation file {}, using defaults.");
 			e1.printStackTrace();
 		}
-	
 	}
-	
-	private String setConfig(String setTo, String defaultVal)
-	{
-		return (StringUtils.isNotEmpty(setTo)) ? setTo : defaultVal;
 
-	}
-	
-	
+	/* (non-Javadoc) Process incoming AppDirect events. 
+	 * @see javax.servlet.http.HttpServlet#doGet(javax.servlet.http.HttpServletRequest, javax.servlet.http.HttpServletResponse)
+	 */
 	@Override
 	public void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-		
+
 		// don't process anything that is not Oauth signed by AD
-		if (!validateOAuthSignature(req))
-		{
+		if (!validateOAuthSignature(req)) {
 			// short circuit TODO: make this 401
 			resp.setContentType("text/plain");
 			resp.getWriter().println("Sorry, you are not Authorized.\n\n");
-		}
-		else
-		{
-			// we have a legitimate AD request, lets see if its valid and attempt to process it
+		} else {
+			// we have a legitimate AD request, lets see if its valid and
+			// attempt to process it
 			if (req.getParameter(PARAM_ACTION) != null) {
 				String action = req.getParameter(PARAM_ACTION);
 				String eventUrl = req.getParameter(PARAM_EVENT_URL);
 
 				// obtain xml from eventUrl (signed fetch)
 				Document dDoc = obtainXmlDoc(eventUrl);
-				
-				if (dDoc==null)
-				{
-					logger.info("Unable to obtain valid xml from attempted signed fetch on eventUrl: {}",eventUrl);
+
+				if (dDoc == null) {
+					logger.info("Unable to obtain valid xml from attempted signed fetch on eventUrl: {}", eventUrl);
 					sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE,
-							"Unable to obtain valid xml from eventUrl: "+eventUrl);	
+							"Unable to obtain valid xml from eventUrl: " + eventUrl);
 					return;
 				}
-				
-				// log all xml that comes in, this is just for informational purposes 
+
+				// log xml that comes in, this is just for
+				// informational/debugging purposes
 				createActivityFromEventXml(dDoc);
-				
-				// TODO: add Stateless and Develop flag check, and change code accordingly
-				
-				
+
 				/*
-				 * handle these: 
-				 * SUBSCRIPTION_ORDER: fired by AppDirect when a user
-				 * buys an app from AppDirect. 
+				 * handle these: SUBSCRIPTION_ORDER: fired by AppDirect when a
+				 * user buys an app from AppDirect.
 				 * 
-				 * SUBSCRIPTION_CHANGE: fired by
-				 * AppDirect when a user upgrades/downgrades/modifies an existing
-				 * subscription. 
+				 * SUBSCRIPTION_CHANGE: fired by AppDirect when a user
+				 * upgrades/downgrades/modifies an existing subscription.
 				 * 
-				 * SUBSCRIPTION_CANCEL: fired by AppDirect when a user
-				 * cancels a subscription. 
+				 * SUBSCRIPTION_CANCEL: fired by AppDirect when a user cancels a
+				 * subscription.
 				 * 
-				 * SUBSCRIPTION_NOTICE: fired by AppDirect
-				 * when a subscription goes overdue or delinquent. 
+				 * SUBSCRIPTION_NOTICE: fired by AppDirect when a subscription
+				 * goes overdue or delinquent.
 				 * 
-				 * USER_ASSIGNMENT:
-				 * fired by AppDirect when a user assigns a user to an app.
+				 * USER_ASSIGNMENT: fired by AppDirect when a user assigns a
+				 * user to an app.
 				 * 
 				 * USER_UNASSIGNMENT: fired by AppDirect when a user unassigns a
 				 * user from an app.
 				 */
 				switch (action) {
-				case "SUBSCRIPTION_ORDER":
+				case EVENT_TYPE_SUB_ORDER:
 					handleSubOrder(resp, dDoc);
 					break;
-				case "SUBSCRIPTION_CHANGE":
+				case EVENT_TYPE_SUB_CHANGE:
 					handleSubChange(resp, dDoc);
 					break;
-				case "SUBSCRIPTION_CANCEL":
+				case EVENT_TYPE_SUB_CANCEL:
 					handleSubCancel(resp, dDoc);
 					break;
-				case "SUBSCRIPTION_NOTICE":
+				case EVENT_TYPE_SUB_NOTICE:
 					handleSubNotice(resp, dDoc);
 					break;
-				case "USER_ASSIGNMENT":
+				case EVENT_TYPE_USER_ASSIGN:
 					handleUserAssign(resp, dDoc);
 					break;
-				case "USER_UNASSIGNMENT":
+				case EVENT_TYPE_USER_UNASSIGN:
 					handleUserUnassign(resp, dDoc);
 					break;
-					
+
 				default:
-					// unexpected action; TODO: error out gracefully
+					// unexpected action; TODO: change to 401
 					resp.setContentType("text/plain");
 					resp.getWriter().println("Unexpected action parameter: " + action + " \n\n");
 					break;
 				}
-	
+
 			} else {
-			    // TODO: Decide what to do with request with no action.
+				// TODO: change to 401?
 				resp.setContentType("text/plain");
 				resp.getWriter().println("No action parameter provided.\n\n");
 			}
@@ -248,6 +236,9 @@ public class HandleAppDirectServlet extends HttpServlet {
 		com.example.guestbook.model.userAssign.EventType event = validateAccessEventXml(resp,dDoc);
 		
 		if (event==null) return;
+
+		// event type validity check
+		if (checkEventTypeMatch(resp,event.getType(),EVENT_TYPE_USER_UNASSIGN)) return;
 		
 		// deal with flag, true response means a valid error is returned and we can stop processing
 		if (handleOrderFlag(resp, event.getFlag())) return;
@@ -255,6 +246,8 @@ public class HandleAppDirectServlet extends HttpServlet {
 		// user's openid is used for id
 		userId = event.getPayload().getUser().getOpenId();
 		accountId = event.getPayload().getAccount().getAccountIdentifier();
+		
+		//TODO: wrap in transaction
 		
 		// obtains the subscription for accessMangement from event XML, check for missing attributes
 		sub = accessManagementValidate(resp, accountId, userId, "User Unassignment");
@@ -269,14 +262,11 @@ public class HandleAppDirectServlet extends HttpServlet {
 				sendEventProcessErrorResponse(resp, ERROR_CODE_USER_NOT_FOUND,
 						"User Unassignment failed. User not found with user id: " + userId);
 			} else {
-				// we have the user to unassign, go ahead and remove them
-				// delete and re-add without user
-				//TODO: wrap in transaction
-				ObjectifyService.ofy().delete().entity(sub).now();
+				// we have the user to unassign, go ahead and remove them, and update the sub.
 				users.remove(userId);
 				sub.theUsers = users;
 				ObjectifyService.ofy().save().entity(sub).now();
-				logger.info("handleUserUnassign: user removed: {}", userId);
+				logger.info("handleUserUnassign: user removed: {}. Saved subscription: {}", userId, sub);
 				// WE BE DONE, send simple success
 				sendEventProcessSuccessResponse(resp,"User unassigned successfully.");
 			}	
@@ -302,6 +292,9 @@ public class HandleAppDirectServlet extends HttpServlet {
 		
 		if (event==null) return;
 		
+		// event type validity check
+		if (checkEventTypeMatch(resp,event.getType(),EVENT_TYPE_USER_ASSIGN)) return;
+		
 		// deal with flag
 		if (handleOrderFlag(resp, event.getFlag())) return;
 		
@@ -310,6 +303,8 @@ public class HandleAppDirectServlet extends HttpServlet {
 		// user's openid is used for id
 		userId = event.getPayload().getUser().getOpenId();
 
+		// TODO: wrap in transaction
+		
 		// obtains the sub for accessMangement from event XML, check for missing attributes
 		sub = accessManagementValidate(resp, accountId, userId, "User Assignment");
 
@@ -332,15 +327,12 @@ public class HandleAppDirectServlet extends HttpServlet {
 					sendEventProcessErrorResponse(resp, ERROR_CODE_USER_ALREADY_EXISTS,
 							"User assign failed. User already exists with user key: " + userId);
 				} else {
+					// add user
 					User user = new User(event.getPayload().getUser());
 					userList.put(userId, user);
-					
-					
-					// delete and re-add with new user, TODO: wrap in transaction?
-					ObjectifyService.ofy().delete().entity(sub).now();
 					sub.theUsers = userList;
 					ObjectifyService.ofy().save().entity(sub).now();
-					logger.info("handleUserAssign: user added to accountId ({}) with key: {}",accountId, userId);
+					logger.info("handleUserAssign: user added to accountId ({}) with key: {}. Subscription saved: {}",accountId, userId, sub);
 					// WE BE DONE, send simple success
 					sendEventProcessSuccessResponse(resp);
 				}
@@ -428,10 +420,15 @@ public class HandleAppDirectServlet extends HttpServlet {
 		
 		if (event==null) return;
 		
+		// event type validity check
+		if (checkEventTypeMatch(resp,event.getType(),EVENT_TYPE_SUB_NOTICE)) return;
+		
 		// deal with flag
 		if (handleOrderFlag(resp, event.getFlag())) return;
 		
 		String accountId = event.getPayload().getAccount().getAccountIdentifier();
+		
+		//TODO: wrap in transaction
 		
 		// obtain subscription
 		sub = getSubScriptionForAccountId(resp, accountId, "Subscription Notice");
@@ -470,35 +467,32 @@ public class HandleAppDirectServlet extends HttpServlet {
 				case NOTICE_DEACTIVATED:
 					if (!sub.getStatus().equalsIgnoreCase(STATUS_DEACTIVATED))
 					{
-						// delete and re-add as DEACTIVATED; TODO: transaction
-						ObjectifyService.ofy().delete().entity(sub).now();
 						sub.setStatus(STATUS_DEACTIVATED);
 						ObjectifyService.ofy().save().entity(sub).now();
+						logger.info("{} Notice applied. Subscription saved: {}",NOTICE_DEACTIVATED, sub);
 					}
 					sendEventProcessSuccessResponse(resp);					
 					break;
 				case NOTICE_REACTIVATED:
 					if (!sub.getStatus().equalsIgnoreCase(STATUS_ACTIVE))
 					{
-						// delete and re-add as ACTITO: TODO: transaction
-						ObjectifyService.ofy().delete().entity(sub).now();
 						sub.setStatus(STATUS_ACTIVE);
 						ObjectifyService.ofy().save().entity(sub).now();
+						logger.info("{} Notice applied. Subscription saved: {}",NOTICE_REACTIVATED, sub);
 					}
 					sendEventProcessSuccessResponse(resp);
 					break;
 				case NOTICE_CLOSED:
 					if (!sub.getStatus().equalsIgnoreCase(STATUS_CANCELED))
 					{
-						// delete and re-add as CANCELED; TODO: transaction
-						ObjectifyService.ofy().delete().entity(sub).now();
 						sub.setStatus(STATUS_CANCELED);
 						ObjectifyService.ofy().save().entity(sub).now();
+						logger.info("{} Notice applied. Subscription saved: {}",NOTICE_CLOSED, sub);
 					}
 					sendEventProcessSuccessResponse(resp);	
 					break;
 				case NOTICE_UPCOMING_INVOICE:
-					handleUpcomingInvoice(resp);
+					handleUpcomingInvoice(resp, sub);
 					break;
 				default:
 					sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE,
@@ -572,7 +566,6 @@ public class HandleAppDirectServlet extends HttpServlet {
 			returnValue = true;
 		}
 		return returnValue;
-		
 	}
 	
 	/**
@@ -600,8 +593,15 @@ public class HandleAppDirectServlet extends HttpServlet {
 	}
 
 
-	private void handleUpcomingInvoice(HttpServletResponse resp) throws IOException {
-		// TODO: handle upcoming invoice, for this implementation, we will ignore and pretend everything is okay
+	/**
+	 * Handle an upcoming invoice notice. For this implementation we won't do anything.
+	 * TODO: figure out what we want to do for an upcoming invoice notice and make it so.
+	 * @param resp HttpServletResponse to send response
+	 * @param sub subscription on which the notice has been sent
+	 * @throws IOException
+	 */
+	private void handleUpcomingInvoice(HttpServletResponse resp, Subscription sub) throws IOException {
+		logger.info("{} Notice applied. Subscription left the same: {}",NOTICE_UPCOMING_INVOICE, sub);
 		sendEventProcessSuccessResponse(resp);		
 	}
 
@@ -618,13 +618,16 @@ public class HandleAppDirectServlet extends HttpServlet {
 		com.example.guestbook.model.subChange.EventType event  = validateOrderUpdateXml(resp, dDoc,"Cancel");
 		
 		if (event==null) return;
+
+		// event type validity check
+		if (checkEventTypeMatch(resp,event.getType(),EVENT_TYPE_SUB_CANCEL)) return;
 		
 		// handle flag
 		if (handleOrderFlag(resp, event.getFlag())) return;
 		
 		String accountId = event.getPayload().getAccount().getAccountIdentifier();
-		
-		// obtain subscription
+
+		// obtain subscription, TODO: wrap in transaction
 		sub = getSubScriptionForAccountId(resp, accountId, "Subscription Cancel");
 		if (sub!=null)	
 		{
@@ -633,10 +636,9 @@ public class HandleAppDirectServlet extends HttpServlet {
 				logger.info("handleSubCancel: sub already canceled for accountId {}; returning success.", accountId);
 			} else {
 				logger.info("handleSubCancel: subscription already exists for accountId: {}, with status: {}. Updating to Canceled.",accountId,sub.getStatus());
-				// delete and re-add as CANCELED, TODO: wrap in transaction
-				ObjectifyService.ofy().delete().entity(sub).now();
 				sub.setStatus(STATUS_CANCELED);
 				ObjectifyService.ofy().save().entity(sub).now();
+				logger.info("Subscripton canceled. Subscription saved: {}", sub);
 			}
 			sendEventProcessSuccessResponse(resp, "Subscription canceled.");
 		}
@@ -850,11 +852,14 @@ public class HandleAppDirectServlet extends HttpServlet {
 		
 		if (event==null) return;
 		
+		// event type validity check
+		if (checkEventTypeMatch(resp,event.getType(),EVENT_TYPE_SUB_CHANGE)) return;
+		
 		if (handleOrderFlag(resp, event.getFlag())) return;
 		
 		String accountId = event.getPayload().getAccount().getAccountIdentifier();
 		
-		// obtain subscription
+		// obtain subscription TODO: wrap in transaction
 		sub = getSubScriptionForAccountId(resp, accountId, "Subscription Change");
 			
 		if (sub!=null)
@@ -868,14 +873,11 @@ public class HandleAppDirectServlet extends HttpServlet {
 			 * TODO: validate this assumption and make changes as necessary
 			 */
 			Order currentOrder = sub.getOrder();
-			
 			Order order = new Order(event.getPayload().getOrder());
-			
 			logger.info("Replacing accountId {} current subscription order: {}; with changed order: {}",accountId,currentOrder,order);
-			// delete and re-add with updated order, TODO: wrap in transaction
-			ObjectifyService.ofy().delete().entity(sub).now();
 			sub.setOrder(order);
 			ObjectifyService.ofy().save().entity(sub).now();
+			logger.info("Subscripton changed. Subscription saved: {}", sub);
 			// just send success
 			sendEventProcessSuccessResponse(resp);	
 		}
@@ -901,9 +903,14 @@ public class HandleAppDirectServlet extends HttpServlet {
 		if (flag!=null && flag.equalsIgnoreCase(FLAG_STATELESS))
 		{
 			logger.info("Stateless flag detected.");
-			// UNCOMMENT LINES BELOW TO IGNORE STATELESS CALLS
-			//sendEventProcessErrorResponse(resp, ERROR_CODE_UNKNOWN_ERROR,"STATELESS flag detected, returning UNKNOWN ERROR.");
-			//isHandled = true;
+			if (processStatelessFlag)
+			{
+				logger.info("ProcessStatelessFlag is turned on, we will process this request normally. Set ProcessStatelessFlag to false (see {}) to send immediate valid error response for Stateless events.",CONFIG_FILE_PATH);
+			} else
+			{
+				sendEventProcessErrorResponse(resp, ERROR_CODE_UNKNOWN_ERROR,"STATELESS flag detected, returning UNKNOWN ERROR.");
+				isHandled = true;
+			}
 		}
 		else 
 		{ 
@@ -1010,10 +1017,25 @@ public class HandleAppDirectServlet extends HttpServlet {
 			sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE, "XML not formatted correctly for Subscription Order. Exception message: "+StringEscapeUtils.escapeXml(e.getMessage()));
 			return null;
 		}
-				
+		// event type validity check
+		if (checkEventTypeMatch(resp,event.getType(),EVENT_TYPE_SUB_ORDER)) return null;
+		
 		return event;
-}
-
+	}
+	
+	private boolean checkEventTypeMatch(HttpServletResponse resp, String eventTypeIn , String eventTypeExpected) throws IOException
+	{
+		
+		boolean returnValue = false;
+		if (!eventTypeExpected.equalsIgnoreCase(eventTypeIn)) {
+			logger.info("Expected event type {}, received: {}",eventTypeExpected,eventTypeIn);
+			sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE,
+					"Expected event type "+eventTypeExpected+", received "+eventTypeIn);
+			returnValue = true;
+		}
+		return returnValue;
+		
+	}
 	
 	
 	
@@ -1059,14 +1081,13 @@ public class HandleAppDirectServlet extends HttpServlet {
 		// check if subscription exists TODO: check for multiple sub entries in d/b
 		sub = ObjectifyService.ofy().load().type(Subscription.class).filter("accountId", accountId).first().now();
 		
-		
 		if (sub!=null)
 		{
 		    if ((sub.status.equalsIgnoreCase(STATUS_DEACTIVATED)) || (sub.status.equalsIgnoreCase(STATUS_CANCELED)))
 			{
 				// assume re-purchasing deactivated or canceled? remove the the old status and create a new one
 		    	// note, the new sub may have different attributes
-				logger.info("createSubscriptionFromXml: recreating subscription that already exists for (accountId): {}, with status: {}",accountId,sub.status);
+				logger.info("createSubscriptionFromXml: deleting and recreating subscription that already exists for (accountId): {}, with status: {}. Delete sub: {}",accountId,sub.status, sub);
 				ObjectifyService.ofy().delete().entity(sub).now();
 			}
 			else
@@ -1088,7 +1109,6 @@ public class HandleAppDirectServlet extends HttpServlet {
 		String status = STATUS_ACTIVE;
 		Map<String,User> theUsers = (Map<String,User>) new HashMap<String,User>(); // no users initially
 	
-	
         // create a new subscription object
 		sub = new Subscription(accountId,marketPlace,creator,company,order,status, theUsers); 
 		// may have a flag
@@ -1098,6 +1118,7 @@ public class HandleAppDirectServlet extends HttpServlet {
 		 * save the subscription record 
 		 */
 		ObjectifyService.ofy().save().entity(sub).now();
+		logger.info("New subscription created: {}",sub);
 		// END TRANSACTION
 		
 		// passing back non-empty accountId indicates success
@@ -1182,26 +1203,24 @@ public class HandleAppDirectServlet extends HttpServlet {
 	private boolean createActivityFromEventXml(Document dDoc) {
 		boolean isSuccessful = false;
 		if (dDoc != null) {
+			/*
+			 * Uncomment below (and modify?) if we wish to extract values from xml to put into activity log
+			 */
 			//String activityType = getXmlElementValueAsString("/event/type/text()", dDoc);
 			//String customer = getXmlElementValueAsString("/event/creator/firstName/text()", dDoc) + " "
 			//		+ getXmlElementValueAsString("/event/creator/lastName/text()", dDoc);
 			//String version = getXmlElementValueAsString("/event/marketplace/partner/text()", dDoc);
-			/* 
-			 * for detail: display all the xml
-			 */
+			// for detail: display all the xml
 			String theXml = getStringFromDocument(dDoc);
 			String detail = theXml;
 			//AppActivity activity = new AppActivity(activityType, customer, version, detail);
 			AppActivity activity = new AppActivity("", "", "", detail);
-
 			/*
 			 * Save to d/b
 			 * Use Objectify to save the activity and now() is used to make
-			 * the call synchronously as we will immediately get a new page
-			 * using redirect and we want the data to be present.
+			 * the call synchronously.
 			 */
 			ObjectifyService.ofy().save().entity(activity).now();
-
 			isSuccessful = true;
 		} else {
 			logger.info("Null xml document in createActivityFromEventXml, no activity saved to d/b!");
@@ -1216,31 +1235,17 @@ public class HandleAppDirectServlet extends HttpServlet {
 	 */
 	private HttpURLConnection signRequest(String theUrl)
 	{		
-		OAuthConsumer consumer = new DefaultOAuthConsumer(OAUTH_CONSUMER_KEY, OAUTH_CONSUMER_SECRET);
+		OAuthConsumer consumer = new DefaultOAuthConsumer(oauthConsumerKey, oauthConsumerSecret);
 		URL url;
 		try {
 			url = new URL(theUrl);
 			HttpURLConnection request = (HttpURLConnection) url.openConnection();
 			consumer.sign(request);
-			return request;
-			
-			//TODO: handle these errors appropriately i.e. logging or whatever
-		} catch (MalformedURLException e) {
-			// TODO Auto-generated catch block
+			return request;		
+		} catch (Exception e) {
+			logger.warn("An exception occurred try to sign the request {}. Exception message: {}", theUrl, e.getMessage() );
 			e.printStackTrace();
-		} catch (OAuthMessageSignerException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (OAuthExpectationFailedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (OAuthCommunicationException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+		} 
 		return null;
 		
 	}
@@ -1276,7 +1281,5 @@ public class HandleAppDirectServlet extends HttpServlet {
 		}
 		return theValue;
 	}
-	
-	
 
 }

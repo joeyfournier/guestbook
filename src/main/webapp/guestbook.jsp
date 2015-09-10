@@ -30,7 +30,7 @@ if ((session!=null) && ("TRUE".equals(session.getAttribute("appDirectAccessValid
 		session.setAttribute("appDirectAccessValidated","FALSE");
 		%>
 	<p>
-		You have been logged out, visit <a href="http://appdirect.com">AppDirect</a>
+		You have been logged out, visit <a href="https://www.appdirect.com/account/apps/">AppDirect</a>
 		to log back in for access to this application.
 	</p>
 	<%
@@ -139,7 +139,7 @@ if ((session!=null) && ("TRUE".equals(session.getAttribute("appDirectAccessValid
 		</div>
 	</form>
 	<p></p>
-
+    <p>---------------------------------------------------------------------------------------------</p>
 	<p>Let's see all AppDirect SUBSCRIPTIONS (not just yours):</p>
 
 	<%
@@ -186,7 +186,8 @@ if ((session!=null) && ("TRUE".equals(session.getAttribute("appDirectAccessValid
 	        }
 	    }
 	%>
-	<p>Let's see all the AppDirect activity (valid xml which passes signed auth):</p>
+	<p>---------------------------------------------------------------------------------------------</p>
+	<p>Debug Activity LOG. This is a list of AppDirect request activity (xml which passes signed auth):</p>
 
 	<%
 	      // query activity 
@@ -203,7 +204,7 @@ if ((session!=null) && ("TRUE".equals(session.getAttribute("appDirectAccessValid
 	<%
 	    } else {
 	%>
-	<p>Well lookie here, we have some AppDirect activities:</p>
+	<p>AppDirect incoming event xml (may be valid or invalid):</p>
 	<%
 	      // Look at all of our activities
 	        for (AppActivity activity : activityList) {
@@ -227,7 +228,7 @@ else
 	<p>Sorry! This application requires a valid subscription and sign
 		on through AppDirect.</p>
 	<p>You must be a valid AppDirect user who has been assigned access to this application.</p>
-	<p>Please visit <a href="http://appdirect.com">AppDirect</a> to access this application. 
+	<p>Please visit (or have your administrator visit) <a href="https://www.appdirect.com/account/apps/">AppDirect</a> to access this application. 
 	</p>
 	<%
 }

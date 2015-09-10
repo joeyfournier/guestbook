@@ -97,8 +97,8 @@
 </form>
 
 <p></p>
-
-<p> Let's see all our app direct SUBSCRIPTIONS: </p>
+<p>---------------------------------------------------------------------------------------------</p>
+<p> AppDirect SUBSCRIPTIONS (not just yours): </p>
 
 <%
     // Run an ancestor query to ensure we see the most up-to-date
@@ -134,7 +134,8 @@
         }
     }
 %>
-<p> Let's see all the app direct activity: </p>
+	<p>---------------------------------------------------------------------------------------------</p>
+	<p>Debug Activity LOG. This is a list of AppDirect request activity (xml which passes signed auth):</p>
 
 <%
     // Run an ancestor query to ensure we see the most up-to-date
@@ -152,7 +153,7 @@
 <%
     } else {
 %>
-<p>Well lookie here, we have some action:</p>
+	<p>AppDirect incoming event xml (may be valid or invalid):</p>
 <%
       // Look at all of our activities
         for (AppActivity activity : activityList) {
