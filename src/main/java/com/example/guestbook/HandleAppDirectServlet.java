@@ -18,7 +18,6 @@ import javax.xml.bind.JAXBException;
 import javax.xml.bind.Unmarshaller;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
@@ -36,7 +35,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
-import org.xml.sax.SAXException;
 
 import com.example.guestbook.model.AppActivity;
 import com.example.guestbook.model.Company;
@@ -50,29 +48,26 @@ import com.googlecode.objectify.ObjectifyService;
 import oauth.signpost.OAuthConsumer;
 import oauth.signpost.basic.DefaultOAuthConsumer;
 
-
-
-
 /**
  * This class provides endpoints for AppDirect Subscription and Access management events
  * ands handles them according to Appdirect documentation at:
  * http://info.appdirect.com/developers/docs/api_integration/api_overview
  * 
- * TODO: - add logging 
- * 		 - make HTTPS
- *       - Handle IOException gracefully
- * 		 - see many other TODOs through-out
+ * TODO: 
+ * - Handle IOException gracefully
+ * - see TODOs through-out
  * 
  * @author Joey Fournier
  */
 public class HandleAppDirectServlet extends HttpServlet {
 	
-	public static final String FLAG_STATELESS = "STATELESS";
-
 	// logger
 	final Logger logger = LoggerFactory.getLogger(HandleAppDirectServlet.class);
-			
+
 	// constants
+	
+	// flags
+	public static final String FLAG_STATELESS = "STATELESS";
 	
 	// parameter names
 	public static final String PARAM_ACTION = "action";
@@ -86,7 +81,7 @@ public class HandleAppDirectServlet extends HttpServlet {
 	public static final String EVENT_TYPE_USER_UNASSIGN = "USER_UNASSIGNMENT";
 	// Notices
 	public static final String NOTICE_DEACTIVATED = "DEACTIVATED";
-	public static final String NOTICE_REACTIVATED ="REACTIVATED";
+	public static final String NOTICE_REACTIVATED = "REACTIVATED";
 	public static final String NOTICE_CLOSED = "CLOSED";
 	public static final String NOTICE_UPCOMING_INVOICE = "UPCOMING_INVOICE";
 	// subscription statuses
@@ -97,22 +92,22 @@ public class HandleAppDirectServlet extends HttpServlet {
 	private static final String ERROR_CODE_USER_ALREADY_EXISTS = "USER_ALREADY_EXISTS";
 	private static final String ERROR_CODE_INVALID_RESPONSE = "INVALID_RESPONSE";
 	private static final String ERROR_CODE_USER_NOT_FOUND = "USER_NOT_FOUND";
-	private static final String ERROR_CODE_ACCOUNT_NOT_FOUND = "ACCOUNT_NOT_FOUND"; 
+	private static final String ERROR_CODE_ACCOUNT_NOT_FOUND = "ACCOUNT_NOT_FOUND";
 	private static final String ERROR_CODE_UNKNOWN_ERROR = "UNKNOWN_ERROR";
-	
+
 	// config file path
 	private static final String CONFIG_FILE_PATH = "WEB-INF/HandleAppDirectServlet.properties";
 	// These values can/should be set by properties in CONFIG_FILE_PATH
-	public static final  String OAUTH_CONSUMER_KEY_DEFAULT = "dummy";
-	public static final  String OAUTH_CONSUMER_SECRET_DEFAULT = "dummy";
-	public static  String oauthConsumerKey = OAUTH_CONSUMER_KEY_DEFAULT;
-	public static  String oauthConsumerSecret = OAUTH_CONSUMER_SECRET_DEFAULT;
+	public static final String OAUTH_CONSUMER_KEY_DEFAULT = "dummy";
+	public static final String OAUTH_CONSUMER_SECRET_DEFAULT = "dummy";
+	public static String oauthConsumerKey = OAUTH_CONSUMER_KEY_DEFAULT;
+	public static String oauthConsumerSecret = OAUTH_CONSUMER_SECRET_DEFAULT;
 	// can be set in properties to process Stateless events (for testing)
 	public static boolean processStatelessFlag = false;
-	
+
 	// Response helper
 	ResponseHelper rh = ResponseHelper.getInstance();
-	
+
 	/**
 	 * Initializes properties {@inheritDoc}
 	 */
@@ -184,30 +179,30 @@ public class HandleAppDirectServlet extends HttpServlet {
 				 * user from an app.
 				 */
 				switch (action) {
-				case EVENT_TYPE_SUB_ORDER:
-					handleSubOrder(resp, dDoc);
-					break;
-				case EVENT_TYPE_SUB_CHANGE:
-					handleSubChange(resp, dDoc);
-					break;
-				case EVENT_TYPE_SUB_CANCEL:
-					handleSubCancel(resp, dDoc);
-					break;
-				case EVENT_TYPE_SUB_NOTICE:
-					handleSubNotice(resp, dDoc);
-					break;
-				case EVENT_TYPE_USER_ASSIGN:
-					handleUserAssign(resp, dDoc);
-					break;
-				case EVENT_TYPE_USER_UNASSIGN:
-					handleUserUnassign(resp, dDoc);
-					break;
+					case EVENT_TYPE_SUB_ORDER:
+						handleSubOrder(resp, dDoc);
+						break;
+					case EVENT_TYPE_SUB_CHANGE:
+						handleSubChange(resp, dDoc);
+						break;
+					case EVENT_TYPE_SUB_CANCEL:
+						handleSubCancel(resp, dDoc);
+						break;
+					case EVENT_TYPE_SUB_NOTICE:
+						handleSubNotice(resp, dDoc);
+						break;
+					case EVENT_TYPE_USER_ASSIGN:
+						handleUserAssign(resp, dDoc);
+						break;
+					case EVENT_TYPE_USER_UNASSIGN:
+						handleUserUnassign(resp, dDoc);
+						break;
 
-				default:
-					// unexpected action; TODO: change to 401?
-					resp.setContentType("text/plain");
-					resp.getWriter().println("Unexpected action parameter: " + action + " \n\n");
-					break;
+					default:
+						// unexpected action; TODO: change to 401?
+						resp.setContentType("text/plain");
+						resp.getWriter().println("Unexpected action parameter: " + action + " \n\n");
+						break;
 				}
 
 			} else {
@@ -218,47 +213,50 @@ public class HandleAppDirectServlet extends HttpServlet {
 		}
 	}
 
-	
 	/**
 	 * Handles User Unassignment xml event, by removing the given user if they exist.
 	 * Will either send success or error xml via the passed in HttpServletResponse object.
+	 * 
 	 * @param resp
-	 * @param dDoc xml for User Unassignment xml
+	 * @param dDoc
+	 *            xml for User Unassignment xml
 	 * @throws IOException
 	 */
 	private void handleUserUnassign(HttpServletResponse resp, Document dDoc) throws IOException {
 
 		Subscription sub = null;
 		String accountId = null;
-		String userId = null;	
+		String userId = null;
 		logger.info("handleUserUnassign...");
 
-		com.example.guestbook.model.userAssign.EventType event = validateAccessEventXml(resp,dDoc);
-		
-		if (event==null) return;
+		com.example.guestbook.model.userAssign.EventType event = validateAccessEventXml(resp, dDoc);
+
+		if (event == null)
+			return;
 
 		// event type validity check
-		if (checkEventTypeMatch(resp,event.getType(),EVENT_TYPE_USER_UNASSIGN)) return;
-		
+		if (checkEventTypeMatch(resp, event.getType(), EVENT_TYPE_USER_UNASSIGN))
+			return;
+
 		// deal with flag, true response means a valid error is returned and we can stop processing
-		if (handleOrderFlag(resp, event.getFlag())) return;
-		
+		if (handleOrderFlag(resp, event.getFlag()))
+			return;
+
 		// user's openid is used for id
 		userId = event.getPayload().getUser().getOpenId();
 		accountId = event.getPayload().getAccount().getAccountIdentifier();
-		
+
 		//TODO: wrap in transaction
-		
+
 		// obtains the subscription for accessMangement from event XML, check for missing attributes
 		sub = accessManagementValidate(resp, accountId, userId, "User Unassignment");
-		
-		if (sub!=null)
-		{	
-	        // don't care about status of subscription for unassignment, just check if user exists
-			Map<String,User> users = (HashMap<String,User>) sub.theUsers;
-			if ((users == null) || (!users.containsKey(userId))){
-	
-				logger.info("handleUserUnssign: user does not exist for accountId {}, user id: {}", accountId,userId);
+
+		if (sub != null) {
+			// don't care about status of subscription for unassignment, just check if user exists
+			Map<String, User> users = (HashMap<String, User>) sub.theUsers;
+			if ((users == null) || (!users.containsKey(userId))) {
+
+				logger.info("handleUserUnssign: user does not exist for accountId {}, user id: {}", accountId, userId);
 				rh.sendEventProcessErrorResponse(resp, ERROR_CODE_USER_NOT_FOUND,
 						"User Unassignment failed. User not found with user id: " + userId);
 			} else {
@@ -268,13 +266,15 @@ public class HandleAppDirectServlet extends HttpServlet {
 				ObjectifyService.ofy().save().entity(sub).now();
 				logger.info("handleUserUnassign: user removed: {}. Saved subscription: {}", userId, sub);
 				// WE BE DONE, send simple success
-				rh.sendEventProcessSuccessResponse(resp,"User unassigned successfully.");
-			}	
+				rh.sendEventProcessSuccessResponse(resp, "User unassigned successfully.");
+			}
 		}
 	}
 
 	/**
-	 * Handle User Assignment based on passed in xml document. Will return appropriate xml via passed in HttpServletResponse.
+	 * Handle User Assignment based on passed in xml document. Will return appropriate xml via passed in
+	 * HttpServletResponse.
+	 * 
 	 * @param resp
 	 * @param dDoc
 	 * @throws IOException
@@ -284,26 +284,29 @@ public class HandleAppDirectServlet extends HttpServlet {
 		Subscription sub = null;
 		String accountId = null;
 		String userId = null;
-		
+
 		logger.info("handleUserAssign...");
-		
-		com.example.guestbook.model.userAssign.EventType event = validateAccessEventXml(resp,dDoc);
-		
-		if (event==null) return;
-		
+
+		com.example.guestbook.model.userAssign.EventType event = validateAccessEventXml(resp, dDoc);
+
+		if (event == null)
+			return;
+
 		// event type validity check
-		if (checkEventTypeMatch(resp,event.getType(),EVENT_TYPE_USER_ASSIGN)) return;
-		
+		if (checkEventTypeMatch(resp, event.getType(), EVENT_TYPE_USER_ASSIGN))
+			return;
+
 		// deal with flag
-		if (handleOrderFlag(resp, event.getFlag())) return;
-		
+		if (handleOrderFlag(resp, event.getFlag()))
+			return;
+
 		accountId = event.getPayload().getAccount().getAccountIdentifier();
-		
+
 		// user's openid is used for id
 		userId = event.getPayload().getUser().getOpenId();
 
 		// TODO: wrap in transaction
-		
+
 		// obtains the sub for accessMangement from event XML, check for missing attributes
 		sub = accessManagementValidate(resp, accountId, userId, "User Assignment");
 
@@ -311,18 +314,18 @@ public class HandleAppDirectServlet extends HttpServlet {
 			// active sub?
 			if (!sub.status.equalsIgnoreCase(STATUS_ACTIVE)) {
 
-				logger.info("handleUserAssign: subscription not active (status={}) for account identifier: {}", sub.getStatus(),accountId);
+				logger.info("handleUserAssign: subscription not active (status={}) for account identifier: {}", sub.getStatus(), accountId);
 				rh.sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE,
 						"User assign failed. Suscription not active for account identifier: " + accountId);
 			} else {
-				Map<String,User> userList = (HashMap<String,User>) sub.theUsers;
+				Map<String, User> userList = (HashMap<String, User>) sub.theUsers;
 				if (userList == null) {
-					userList = (Map<String,User>) new HashMap<String,User>();
+					userList = (Map<String, User>) new HashMap<String, User>();
 				}
 				// does user already exist
 				if (userList.containsKey(userId)) {
 
-					logger.info("handleUserAssign: for accountId {} user already exists for key: {}",accountId, userId);
+					logger.info("handleUserAssign: for accountId {} user already exists for key: {}", accountId, userId);
 					rh.sendEventProcessErrorResponse(resp, ERROR_CODE_USER_ALREADY_EXISTS,
 							"User assign failed. User already exists with user key: " + userId);
 				} else {
@@ -331,29 +334,32 @@ public class HandleAppDirectServlet extends HttpServlet {
 					userList.put(userId, user);
 					sub.theUsers = userList;
 					ObjectifyService.ofy().save().entity(sub).now();
-					logger.info("handleUserAssign: user added to accountId ({}) with key: {}. Subscription saved: {}",accountId, userId, sub);
+					logger.info("handleUserAssign: user added to accountId ({}) with key: {}. Subscription saved: {}", accountId, userId, sub);
 					// WE BE DONE, send simple success
 					rh.sendEventProcessSuccessResponse(resp);
 				}
 			}
-		} 
+		}
 	}
-	
+
 	/**
 	 * Accepts an xml document and attempt to validate it has User Assign object. The xml
 	 * should be a valid AppDirect user assign or unassign events.
-	 * @param resp used to return error response (if needed)
-	 * @param dDoc the xml document
-	 * @param action calling action (i.e. User Assign) to use in response and logs (if needed)
+	 * 
+	 * @param resp
+	 *            used to return error response (if needed)
+	 * @param dDoc
+	 *            the xml document
+	 * @param action
+	 *            calling action (i.e. User Assign) to use in response and logs (if needed)
 	 * @return a user assign object
 	 * @throws IOException
 	 */
-	private com.example.guestbook.model.userAssign.EventType validateAccessEventXml(HttpServletResponse resp, Document dDoc) throws IOException{
-		
-		
-		com.example.guestbook.model.userAssign.EventType event = null;	
+	private com.example.guestbook.model.userAssign.EventType validateAccessEventXml(HttpServletResponse resp, Document dDoc) throws IOException {
+
+		com.example.guestbook.model.userAssign.EventType event = null;
 		// extract xml into sub order event objects.
-		logger.info("Attempting JAXB unmarshall of dDoc = {}",dDoc);
+		logger.info("Attempting JAXB unmarshall of dDoc = {}", dDoc);
 		// Unmarshall the xml into objects
 		JAXBContext jc;
 		try {
@@ -361,51 +367,58 @@ public class HandleAppDirectServlet extends HttpServlet {
 			//Create unmarshaller
 			Unmarshaller um = jc.createUnmarshaller();
 			//EventType event = (EventType) um.unmarshal(signedFetch.getInputStream() );
-			event = (com.example.guestbook.model.userAssign.EventType) um.unmarshal(dDoc ); 
-			logger.info("Created from xml, the following sub order Event={}",event);
-			
+			event = (com.example.guestbook.model.userAssign.EventType) um.unmarshal(dDoc);
+			logger.info("Created from xml, the following sub order Event={}", event);
+
 		} catch (JAXBException e) {
 			e.printStackTrace();
-			logger.info("XML not formatted correctly for User Assign. Exception message: {}",StringEscapeUtils.escapeXml(e.getMessage()));
-			rh.sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE, "XML not formatted correctly for User Assign. Exception message: "+StringEscapeUtils.escapeXml(e.getMessage()));
+			logger.info("XML not formatted correctly for User Assign. Exception message: {}", StringEscapeUtils.escapeXml(e.getMessage()));
+			rh.sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE, "XML not formatted correctly for User Assign. Exception message: " + StringEscapeUtils.escapeXml(e.getMessage()));
 		}
 		return event;
 	}
-	
+
 	/**
 	 * Validates for user assign/unassign passed in required fields (from xml) and makes sure the subscription
 	 * exists on which the assign/unassign is operating on. This routine sends error xml via the passed in
 	 * HttpServletResponse if validation errors occur.
-	 * @param resp HttpServletResponse used to return error xml if needed
-	 * @param accountId the accountId from xml
-	 * @param openId the user id from xml
-	 * @param action name of the action (i.e. Assignment or Unassignment) taking place to use in error messages
+	 * 
+	 * @param resp
+	 *            HttpServletResponse used to return error xml if needed
+	 * @param accountId
+	 *            the accountId from xml
+	 * @param openId
+	 *            the user id from xml
+	 * @param action
+	 *            name of the action (i.e. Assignment or Unassignment) taking place to use in error messages
 	 * @return returns subscription on which access management is being done if it exists, null otherwise
 	 * @throws IOException
 	 */
-	private Subscription accessManagementValidate(HttpServletResponse resp, String accountId, String userId, String action) throws IOException
-	{
+	private Subscription accessManagementValidate(HttpServletResponse resp, String accountId, String userId, String action) throws IOException {
 		Subscription sub = null;
-		logger.info("accessManagementValidate... for accountId {}",accountId);
+		logger.info("accessManagementValidate... for accountId {}", accountId);
 
 		// make sure accountId is not null
-		if (rh.isNullError (accountId, "account identifier",action,ERROR_CODE_INVALID_RESPONSE,resp)) return null;
+		if (rh.isNullError(accountId, "account identifier", action, ERROR_CODE_INVALID_RESPONSE, resp))
+			return null;
 		// make we have userId at the very least
-		if (rh.isNullError (userId, "user id",action,ERROR_CODE_INVALID_RESPONSE,resp)) return null;
+		if (rh.isNullError(userId, "user id", action, ERROR_CODE_INVALID_RESPONSE, resp))
+			return null;
 
 		// we have openid and account id, get the subscription for the account
 		// obtain subscription
 		sub = getSubScriptionForAccountId(resp, accountId, action);
-		
+
 		return sub;
 	}
-	
-	
+
 	/**
-	 * Handle subscription notice based on passed in xml document. Will return appropriate xml via passed in HttpServletResponse.
+	 * Handle subscription notice based on passed in xml document. Will return appropriate xml via passed in
+	 * HttpServletResponse.
 	 * 
 	 * SUBSCRIPTION_NOTICE: fired by AppDirect
 	 * when a subscription goes overdue or delinquent
+	 * 
 	 * @param resp
 	 * @param dDoc
 	 * @throws IOException
@@ -413,33 +426,35 @@ public class HandleAppDirectServlet extends HttpServlet {
 	private void handleSubNotice(HttpServletResponse resp, Document dDoc) throws IOException {
 
 		Subscription sub = null;
-		
+
 		// validate Notice xml
-		com.example.guestbook.model.subNotice.EventType event = validateNoticeXml( resp,  dDoc, "Notice");
-		
-		if (event==null) return;
-		
+		com.example.guestbook.model.subNotice.EventType event = validateNoticeXml(resp, dDoc, "Notice");
+
+		if (event == null)
+			return;
+
 		// event type validity check
-		if (checkEventTypeMatch(resp,event.getType(),EVENT_TYPE_SUB_NOTICE)) return;
-		
+		if (checkEventTypeMatch(resp, event.getType(), EVENT_TYPE_SUB_NOTICE))
+			return;
+
 		// deal with flag
-		if (handleOrderFlag(resp, event.getFlag())) return;
-		
+		if (handleOrderFlag(resp, event.getFlag()))
+			return;
+
 		String accountId = event.getPayload().getAccount().getAccountIdentifier();
-		
+
 		//TODO: wrap in transaction
-		
+
 		// obtain subscription
 		sub = getSubScriptionForAccountId(resp, accountId, "Subscription Notice");
-		
-		if (sub!=null)
-		{
+
+		if (sub != null) {
 			/*
 			 * regardless of the current status, we will act upon the Subscription Notice;
 			 * we will only leave status the same if it is already in the correct state
 			 * for the notice.
 			 */
-			
+
 			/*
 			 * A DEACTIVATED notice means the account is deactivated. 
 			 *   It is recommended that all access to the ISV's application be suspended 
@@ -459,62 +474,62 @@ public class HandleAppDirectServlet extends HttpServlet {
 			 *   marketplace with any usage information via the Billing Usage API, which will 
 			 *   be included on the upcoming invoice.
 			 */
-	
+
 			String notice = event.getPayload().getNotice().getType();
-			
+
 			switch (notice.toUpperCase()) {
 				case NOTICE_DEACTIVATED:
-					if (!sub.getStatus().equalsIgnoreCase(STATUS_DEACTIVATED))
-					{
+					if (!sub.getStatus().equalsIgnoreCase(STATUS_DEACTIVATED)) {
 						sub.setStatus(STATUS_DEACTIVATED);
 						ObjectifyService.ofy().save().entity(sub).now();
-						logger.info("{} Notice applied. Subscription saved: {}",NOTICE_DEACTIVATED, sub);
+						logger.info("{} Notice applied. Subscription saved: {}", NOTICE_DEACTIVATED, sub);
 					}
-					rh.sendEventProcessSuccessResponse(resp);					
+					rh.sendEventProcessSuccessResponse(resp);
 					break;
 				case NOTICE_REACTIVATED:
-					if (!sub.getStatus().equalsIgnoreCase(STATUS_ACTIVE))
-					{
+					if (!sub.getStatus().equalsIgnoreCase(STATUS_ACTIVE)) {
 						sub.setStatus(STATUS_ACTIVE);
 						ObjectifyService.ofy().save().entity(sub).now();
-						logger.info("{} Notice applied. Subscription saved: {}",NOTICE_REACTIVATED, sub);
+						logger.info("{} Notice applied. Subscription saved: {}", NOTICE_REACTIVATED, sub);
 					}
 					rh.sendEventProcessSuccessResponse(resp);
 					break;
 				case NOTICE_CLOSED:
-					if (!sub.getStatus().equalsIgnoreCase(STATUS_CANCELED))
-					{
+					if (!sub.getStatus().equalsIgnoreCase(STATUS_CANCELED)) {
 						sub.setStatus(STATUS_CANCELED);
 						ObjectifyService.ofy().save().entity(sub).now();
-						logger.info("{} Notice applied. Subscription saved: {}",NOTICE_CLOSED, sub);
+						logger.info("{} Notice applied. Subscription saved: {}", NOTICE_CLOSED, sub);
 					}
-					rh.sendEventProcessSuccessResponse(resp);	
+					rh.sendEventProcessSuccessResponse(resp);
 					break;
 				case NOTICE_UPCOMING_INVOICE:
 					handleUpcomingInvoice(resp, sub);
 					break;
 				default:
 					rh.sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE,
-							"Subscription Notice failed. Unrecognized notice: "+notice);
+							"Subscription Notice failed. Unrecognized notice: " + notice);
 			}
 		}
-					
+
 	}
-	
+
 	/**
 	 * Accepts an xml document and attempt to validate it has a Subscription notice object. The xml
 	 * should be a valid AppDirect subscription notice event.
-	 * @param resp used to return error response (if needed)
-	 * @param dDoc the xml document
-	 * @param action calling action (i.e. Subscription Notice) to use in response and logs (if needed)
+	 * 
+	 * @param resp
+	 *            used to return error response (if needed)
+	 * @param dDoc
+	 *            the xml document
+	 * @param action
+	 *            calling action (i.e. Subscription Notice) to use in response and logs (if needed)
 	 * @return a subscription change event object
 	 * @throws IOException
 	 */
 	private com.example.guestbook.model.subNotice.EventType validateNoticeXml(HttpServletResponse resp, Document dDoc, String action) throws IOException {
-		
-		
+
 		com.example.guestbook.model.subNotice.EventType event = null;
-		
+
 		// extract xml into sub order event objects.
 		logger.info("Attempting JAXB unmarshall of dDoc = {}", dDoc);
 		// Unmarshall the xml into objects
@@ -524,40 +539,47 @@ public class HandleAppDirectServlet extends HttpServlet {
 			//Create unmarshaller
 			Unmarshaller um = jc.createUnmarshaller();
 			//EventType event = (EventType) um.unmarshal(signedFetch.getInputStream() );
-			event = (com.example.guestbook.model.subNotice.EventType) um.unmarshal(dDoc ); 
-			logger.info("Created from xml, the following Event={}",event);
-			
+			event = (com.example.guestbook.model.subNotice.EventType) um.unmarshal(dDoc);
+			logger.info("Created from xml, the following Event={}", event);
+
 		} catch (JAXBException e) {
 			e.printStackTrace();
-			logger.info("XML not formatted correctly for Subscription  {}. Exception message: {}",action,StringEscapeUtils.escapeXml(e.getMessage()));
-			rh.sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE, "XML not formatted correctly for Subscription  "+action+". Exception message: "+StringEscapeUtils.escapeXml(e.getMessage()));
+			logger.info("XML not formatted correctly for Subscription  {}. Exception message: {}", action, StringEscapeUtils.escapeXml(e.getMessage()));
+			rh.sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE, "XML not formatted correctly for Subscription  " + action + ". Exception message: " + StringEscapeUtils.escapeXml(e.getMessage()));
 			return null;
 		}
-		
+
 		// verify accountId and notice type exists in xml
 		String accountId = event.getPayload().getAccount().getAccountIdentifier();
-		if (rh.isNullError (accountId, "account identifier",action,(Object)event,ERROR_CODE_INVALID_RESPONSE,resp)) return null;
-		if (rh.isNullError (event.getPayload().getNotice(), "Notice",action,(Object)event,ERROR_CODE_INVALID_RESPONSE, resp)) return null;
-		if (rh.isNullError (event.getPayload().getNotice().getType(), "Notice Type",action,(Object)event,ERROR_CODE_INVALID_RESPONSE,resp)) return null;
-		
+		if (rh.isNullError(accountId, "account identifier", action, (Object) event, ERROR_CODE_INVALID_RESPONSE, resp))
+			return null;
+		if (rh.isNullError(event.getPayload().getNotice(), "Notice", action, (Object) event, ERROR_CODE_INVALID_RESPONSE, resp))
+			return null;
+		if (rh.isNullError(event.getPayload().getNotice().getType(), "Notice Type", action, (Object) event, ERROR_CODE_INVALID_RESPONSE, resp))
+			return null;
+
 		return event;
 	}
-
 
 	/**
 	 * Handle an upcoming invoice notice. For this implementation we won't do anything.
 	 * TODO: figure out what we want to do for an upcoming invoice notice and make it so.
-	 * @param resp HttpServletResponse to send response
-	 * @param sub subscription on which the notice has been sent
+	 * 
+	 * @param resp
+	 *            HttpServletResponse to send response
+	 * @param sub
+	 *            subscription on which the notice has been sent
 	 * @throws IOException
 	 */
 	private void handleUpcomingInvoice(HttpServletResponse resp, Subscription sub) throws IOException {
-		logger.info("{} Notice applied. Subscription left the same: {}",NOTICE_UPCOMING_INVOICE, sub);
-		rh.sendEventProcessSuccessResponse(resp);		
+		logger.info("{} Notice applied. Subscription left the same: {}", NOTICE_UPCOMING_INVOICE, sub);
+		rh.sendEventProcessSuccessResponse(resp);
 	}
 
 	/**
-	 * Handle subscription cancel based on passed in xml document. Will return appropriate xml via passed in HttpServletResponse.
+	 * Handle subscription cancel based on passed in xml document. Will return appropriate xml via passed in
+	 * HttpServletResponse.
+	 * 
 	 * @param resp
 	 * @param dDoc
 	 * @throws IOException
@@ -566,27 +588,29 @@ public class HandleAppDirectServlet extends HttpServlet {
 
 		Subscription sub = null;
 
-		com.example.guestbook.model.subChange.EventType event  = validateOrderUpdateXml(resp, dDoc,"Cancel");
-		
-		if (event==null) return;
+		com.example.guestbook.model.subChange.EventType event = validateOrderUpdateXml(resp, dDoc, "Cancel");
+
+		if (event == null)
+			return;
 
 		// event type validity check
-		if (checkEventTypeMatch(resp,event.getType(),EVENT_TYPE_SUB_CANCEL)) return;
-		
+		if (checkEventTypeMatch(resp, event.getType(), EVENT_TYPE_SUB_CANCEL))
+			return;
+
 		// handle flag
-		if (handleOrderFlag(resp, event.getFlag())) return;
-		
+		if (handleOrderFlag(resp, event.getFlag()))
+			return;
+
 		String accountId = event.getPayload().getAccount().getAccountIdentifier();
 
 		// obtain subscription, TODO: wrap in transaction
 		sub = getSubScriptionForAccountId(resp, accountId, "Subscription Cancel");
-		if (sub!=null)	
-		{
+		if (sub != null) {
 			if (sub.status.equalsIgnoreCase(STATUS_CANCELED)) {
 				// already canceled, nothing to do
 				logger.info("handleSubCancel: sub already canceled for accountId {}; returning success.", accountId);
 			} else {
-				logger.info("handleSubCancel: subscription already exists for accountId: {}, with status: {}. Updating to Canceled.",accountId,sub.getStatus());
+				logger.info("handleSubCancel: subscription already exists for accountId: {}, with status: {}. Updating to Canceled.", accountId, sub.getStatus());
 				sub.setStatus(STATUS_CANCELED);
 				ObjectifyService.ofy().save().entity(sub).now();
 				logger.info("Subscripton canceled. Subscription saved: {}", sub);
@@ -594,70 +618,69 @@ public class HandleAppDirectServlet extends HttpServlet {
 			rh.sendEventProcessSuccessResponse(resp, "Subscription canceled.");
 		}
 	}
-	
+
 	/**
 	 * Validates request is from AppDirect by checking the Oauth signature
 	 * 
-	 * WARNING: couldn't find any obvious examples of this, spent some time trying 
-	 * various things, but will have to do this later. I sent questions to 
+	 * WARNING: couldn't find any obvious examples of this, spent some time trying
+	 * various things, but will have to do this later. I sent questions to
 	 * AppDirect people and was told this is one of the more complex and error prone
 	 * areas and that they often tell developers to skip this, so i'm skipping it
 	 * to work on other integration areas.
 	 *
 	 * @param req
-	 * @return true if Appdirerct Request has valid OAuth Signature 
+	 * @return true if Appdirerct Request has valid OAuth Signature
 	 */
 	private boolean validateOAuthSignature(HttpServletRequest req) {
-		
+
 		// TODO: implement this, see above comments.
 		return true;
 
 	}
-	
+
 	/**
 	 * Process a Subscription Order based on passed event xml. If successful
 	 * a subscription record will be added to d/b. The HttpServletResponse is used
 	 * to return success/fail xml response.
 	 * 
 	 * @param resp
-	 * @param dDoc event xml for sub order
+	 * @param dDoc
+	 *            event xml for sub order
 	 * @throws IOException
 	 */
 	private void handleSubOrder(HttpServletResponse resp, Document dDoc) throws IOException {
 
 		// this method creates a subscription on success and returns the accociated account identifer (null if unsuccessful).
-		String accountIdentifier = createSubscriptionFromXml(dDoc,resp);
+		String accountIdentifier = createSubscriptionFromXml(dDoc, resp);
 
 		// If everything went well we have an accountIdentifier
-		if (accountIdentifier!=null) {
+		if (accountIdentifier != null) {
 			rh.sendEventProcessSuccessResponse(resp, accountIdentifier, "Account creation successful.");
-		} 
+		}
 
 	}
 
-	
 	/**
 	 * Returns xml given an eventUrl by turning it into a signed fetch and
-	 * returning the resulting xml document. 
-     * Turning into a Document is a convenience way to deal with signed fetch
-     * xml in all subsequent code.
+	 * returning the resulting xml document.
+	 * Turning into a Document is a convenience way to deal with signed fetch
+	 * xml in all subsequent code.
+	 * 
 	 * @param eventUrl
 	 * @return xml Document, null on error
 	 */
-	private Document obtainXmlDoc(String eventUrl)
-	{
+	private Document obtainXmlDoc(String eventUrl) {
 
 		DocumentBuilderFactory domFactory = DocumentBuilderFactory.newInstance();
 
 		// sign the eventUrl to obtain xml for event
 		HttpURLConnection signedFetch = signRequest(eventUrl);
 
-		if (signedFetch == null)
-		{
+		if (signedFetch == null) {
 			logger.info("Unable to obtain signed fetch for eventUrl: {}", eventUrl);
 			return null;
 		}
-		
+
 		/*
 		 * uncomment to hack out signing 
 		 * URL url = new URL(eventUrl); 
@@ -668,52 +691,52 @@ public class HandleAppDirectServlet extends HttpServlet {
 		// Attempt to obtain xml in form of Document from the signed eventUrl
 		DocumentBuilder builder;
 		try {
-			
+
 			builder = domFactory.newDocumentBuilder();
-			
-			logger.info("Attempting parse of signedFetch = {} - {}",signedFetch.getURL(),signedFetch.getRequestProperties());
+
+			logger.info("Attempting parse of signedFetch = {} - {}", signedFetch.getURL(), signedFetch.getRequestProperties());
 			Document dDoc = builder.parse(signedFetch.getInputStream());
-			
+
 			return dDoc;
-			
+
 		} catch (Exception e) {
-			logger.info("obtainXmlDoc: Exception encountered signing and parsing {}. Exception message: {}",eventUrl,e.getMessage());
+			logger.info("obtainXmlDoc: Exception encountered signing and parsing {}. Exception message: {}", eventUrl, e.getMessage());
 			e.printStackTrace();
-		} 
+		}
 		return null;
 	}
-	
-	
+
 	/**
 	 * SUBSCRIPTION_CHANGE: fired by AppDirect when a user upgrades/downgrades/modifies an existing subscription.
-	 * Handle subscription change based on passed in xml document. Will return appropriate xml via passed in HttpServletResponse.
-	 * NOTE: in this simplified implemenation, we are not tracking sub details to actually effect the changes, so this is
-	 * essentially a no-op.
+	 * Handle subscription change based on passed in xml document. Will return appropriate xml via passed in
+	 * HttpServletResponse.
+	 * 
 	 * @param resp
 	 * @param dDoc
 	 * @throws IOException
 	 */
 	private void handleSubChange(HttpServletResponse resp, Document dDoc) throws IOException {
 
-
 		Subscription sub = null;
 
-		com.example.guestbook.model.subChange.EventType event  = validateOrderUpdateXml(resp, dDoc,"Change");
-		
-		if (event==null) return;
-		
+		com.example.guestbook.model.subChange.EventType event = validateOrderUpdateXml(resp, dDoc, "Change");
+
+		if (event == null)
+			return;
+
 		// event type validity check
-		if (checkEventTypeMatch(resp,event.getType(),EVENT_TYPE_SUB_CHANGE)) return;
-		
-		if (handleOrderFlag(resp, event.getFlag())) return;
-		
+		if (checkEventTypeMatch(resp, event.getType(), EVENT_TYPE_SUB_CHANGE))
+			return;
+
+		if (handleOrderFlag(resp, event.getFlag()))
+			return;
+
 		String accountId = event.getPayload().getAccount().getAccountIdentifier();
-		
+
 		// obtain subscription TODO: wrap in transaction
 		sub = getSubScriptionForAccountId(resp, accountId, "Subscription Change");
-			
-		if (sub!=null)
-		{
+
+		if (sub != null) {
 			/*
 			 * regardless of the current status, we will act upon the Subscription Change;
 			 * 
@@ -724,46 +747,43 @@ public class HandleAppDirectServlet extends HttpServlet {
 			 */
 			Order currentOrder = sub.getOrder();
 			Order order = new Order(event.getPayload().getOrder());
-			logger.info("Replacing accountId {} current subscription order: {}; with changed order: {}",accountId,currentOrder,order);
+			logger.info("Replacing accountId {} current subscription order: {}; with changed order: {}", accountId, currentOrder, order);
 			sub.setOrder(order);
 			ObjectifyService.ofy().save().entity(sub).now();
 			logger.info("Subscripton changed. Subscription saved: {}", sub);
 			// just send success
-			rh.sendEventProcessSuccessResponse(resp);	
+			rh.sendEventProcessSuccessResponse(resp);
 		}
-								
+
 	}
-	
+
 	/**
 	 * Takes a flag value and acts accordingly for Order events:
 	 * all but STATELESS flags are ignored, we go ahead a process development flags;
-	 * for STATELESS, we  short circuit processing and return a valid error value.
+	 * for STATELESS, we short circuit processing and return a valid error value.
 	 * Returns true if a response has been returned false otherwise.
-	 * @param resp used to send a valid error response if needed
-	 * @param flag the flag to respond to, can be null (ignored)
+	 * 
+	 * @param resp
+	 *            used to send a valid error response if needed
+	 * @param flag
+	 *            the flag to respond to, can be null (ignored)
 	 * @return true if a valid error response returned
 	 * @throws IOException
 	 */
-	private boolean handleOrderFlag(HttpServletResponse resp,String flag) throws IOException
-	{
+	private boolean handleOrderFlag(HttpServletResponse resp, String flag) throws IOException {
 		boolean isHandled = false;
-		
+
 		// for non subscription orders, all but STATELESS flags are ignored, we go ahead a process development flags
 		// for testing we will accept stateless as well, uncomment line below to enable stateless short-circuit
-		if (flag!=null && flag.equalsIgnoreCase(FLAG_STATELESS))
-		{
+		if (flag != null && flag.equalsIgnoreCase(FLAG_STATELESS)) {
 			logger.info("Stateless flag detected.");
-			if (processStatelessFlag)
-			{
-				logger.info("ProcessStatelessFlag is turned on, we will process this request normally. Set ProcessStatelessFlag to false (see {}) to send immediate valid error response for Stateless events.",CONFIG_FILE_PATH);
-			} else
-			{
-				rh.sendEventProcessErrorResponse(resp, ERROR_CODE_UNKNOWN_ERROR,"STATELESS flag detected, returning UNKNOWN ERROR.");
+			if (processStatelessFlag) {
+				logger.info("ProcessStatelessFlag is turned on, we will process this request normally. Set ProcessStatelessFlag to false (see {}) to send immediate valid error response for Stateless events.", CONFIG_FILE_PATH);
+			} else {
+				rh.sendEventProcessErrorResponse(resp, ERROR_CODE_UNKNOWN_ERROR, "STATELESS flag detected, returning UNKNOWN ERROR.");
 				isHandled = true;
 			}
-		}
-		else 
-		{ 
+		} else {
 			// any other flag will be addded to subscription d/b in case we care
 			logger.info("Flag ({})detected; will be recorded in the subscripton.", flag);
 		}
@@ -772,9 +792,12 @@ public class HandleAppDirectServlet extends HttpServlet {
 
 	/**
 	 * Accepts an account id and attempts to return a related stored subscription.
-	 * @param resp used to return error response (if needed)
+	 * 
+	 * @param resp
+	 *            used to return error response (if needed)
 	 * @param accountId
-	 * @param action calling action to use in response and logs (if needed)
+	 * @param action
+	 *            calling action to use in response and logs (if needed)
 	 * @return subscription stored in d/b with passed in account Id
 	 * @throws IOException
 	 */
@@ -784,17 +807,17 @@ public class HandleAppDirectServlet extends HttpServlet {
 		// in d/b
 		Subscription sub = ObjectifyService.ofy().load().type(Subscription.class).filter("accountId", accountId).first()
 				.now();
-	
+
 		if (sub == null) {
 
 			// account doesn't exist, can't handle sub change
-			logger.info("{} failed, No subscription found for : {}",action, accountId);
+			logger.info("{} failed, No subscription found for : {}", action, accountId);
 			rh.sendEventProcessErrorResponse(resp, ERROR_CODE_ACCOUNT_NOT_FOUND,
 					action + " failed. Acccount not found for account identifier: " + accountId);
 		}
 		return sub;
 	}
-	
+
 	/**
 	 * Accepts an xml document and attempt to validate it has a Subscription
 	 * change object. The xml should be a valid AppDirect subscription change or
@@ -844,7 +867,7 @@ public class HandleAppDirectServlet extends HttpServlet {
 
 		return event;
 	}
-	
+
 	/**
 	 * Accepts an xml document and attempt to validate it has a Subscription
 	 * order object. The xml should be a valid AppDirect subscription order
@@ -887,22 +910,20 @@ public class HandleAppDirectServlet extends HttpServlet {
 
 		return event;
 	}
-	
-	private boolean checkEventTypeMatch(HttpServletResponse resp, String eventTypeIn , String eventTypeExpected) throws IOException
-	{
-		
+
+	private boolean checkEventTypeMatch(HttpServletResponse resp, String eventTypeIn, String eventTypeExpected) throws IOException {
+
 		boolean returnValue = false;
 		if (!eventTypeExpected.equalsIgnoreCase(eventTypeIn)) {
-			logger.info("Expected event type {}, received: {}",eventTypeExpected,eventTypeIn);
+			logger.info("Expected event type {}, received: {}", eventTypeExpected, eventTypeIn);
 			rh.sendEventProcessErrorResponse(resp, ERROR_CODE_INVALID_RESPONSE,
-					"Expected event type "+eventTypeExpected+", received "+eventTypeIn);
+					"Expected event type " + eventTypeExpected + ", received " + eventTypeIn);
 			returnValue = true;
 		}
 		return returnValue;
-		
+
 	}
-	
-	
+
 	/**
 	 * Attempts to create a subscription based on passed in xml. If successful,
 	 * creates an subscription d/b entry and returns the account id.
@@ -993,74 +1014,68 @@ public class HandleAppDirectServlet extends HttpServlet {
 		// passing back non-empty accountId indicates success
 		return accountId;
 	}
-	
-	
-	
-	
+
 	public UUID generateUUID() {
 		// generate random UUIDs
 		UUID idOne = UUID.randomUUID();
-		logger.debug("UUID generated: {}" ,idOne);
+		logger.debug("UUID generated: {}", idOne);
 		return idOne;
 	}
 
-	
 	/**
-	 * Generates a new accountId. 
+	 * Generates a new accountId.
 	 * TODO: Decide what we really want to for strategy for account ids.
 	 * This determines if we limit subscriptions per company, etc.
-	 * For now, lets use a company uuid which limits a company to 
+	 * For now, lets use a company uuid which limits a company to
 	 * having only 1 subscription regardless of edition of our application.
 	 * This is mostly for testing purposes. May want to append edition.
-	 * We could make it unique every time providing the ability to 
+	 * We could make it unique every time providing the ability to
 	 * have unlimited subscriptions
-	 * @param subscription event object
+	 * 
+	 * @param subscription
+	 *            event object
 	 * @return accountId
 	 */
 	private String generateNewAccountId(com.example.guestbook.model.subOrder.EventType event) {
 		String accountId = null;
 		// below would generate a unique id prefixed by company name (unlimited subscriptions)
 		//accountId = event.getPayload().getCompany().getName() + generateUUID().toString();
-		
+
 		// this is company uuid + edition which limits a company to having a subscription per edition
 		//accountId = event.getPayload().getCompany().getUuid()+event.getPayload().getOrder().getEditionCode();
-		
+
 		// this is company uuid  which limits a company to having one subscription regardless of edition
 		accountId = event.getPayload().getCompany().getUuid();
 		return accountId;
 	}
 
-
-
 	/**
 	 * Converts entire xml document into a string.
-	 * @param doc xml document
+	 * 
+	 * @param doc
+	 *            xml document
 	 * @return string representation of the xml document , null if error
 	 */
-	public String getStringFromDocument(Document doc)
-	{
-	    try
-	    {
-	       DOMSource domSource = new DOMSource(doc);
-	       StringWriter writer = new StringWriter();
-	       StreamResult result = new StreamResult(writer);
-	       TransformerFactory tf = TransformerFactory.newInstance();
-	       Transformer transformer = tf.newTransformer();
-	       transformer.transform(domSource, result);
-	       return writer.toString();
-	    }
-	    catch(TransformerException ex)
-	    {
-	       logger.info("Exception converting xml doc {} to string. Excpetion message: {}",doc,ex.getMessage());
-	       ex.printStackTrace();
-	       return null;
-	    }
-	} 
-	
+	public String getStringFromDocument(Document doc) {
+		try {
+			DOMSource domSource = new DOMSource(doc);
+			StringWriter writer = new StringWriter();
+			StreamResult result = new StreamResult(writer);
+			TransformerFactory tf = TransformerFactory.newInstance();
+			Transformer transformer = tf.newTransformer();
+			transformer.transform(domSource, result);
+			return writer.toString();
+		} catch (TransformerException ex) {
+			logger.info("Exception converting xml doc {} to string. Excpetion message: {}", doc, ex.getMessage());
+			ex.printStackTrace();
+			return null;
+		}
+	}
+
 	/**
 	 * For logging/debugging purposes.
 	 * Takes xml document and attempts log the xml and could also extract values to create
-	 * an activity d/b entry to record activity that we attempted to process 
+	 * an activity d/b entry to record activity that we attempted to process
 	 * TODO: record status of attempt
 	 * 
 	 * @param dDoc
@@ -1089,14 +1104,13 @@ public class HandleAppDirectServlet extends HttpServlet {
 			 * the call synchronously.
 			 */
 			ObjectifyService.ofy().save().entity(activity).now();
-			logger.info("XXXXXXXXXXXXX created activity for dDoc {} - xml: {}",dDoc,theXml);
 			isSuccessful = true;
 		} else {
 			logger.info("Null xml document in createActivityFromEventXml, no activity saved to d/b!");
 		}
 		return isSuccessful;
 	}
-	
+
 	/**
 	 * Accepts a string URL and returns an HttpUrlConnection that is signed with Oauth Key and Secret
 	 * 
@@ -1131,19 +1145,16 @@ public class HandleAppDirectServlet extends HttpServlet {
 	 */
 	String getXmlElementValueAsString(String xPathExpression, Document dDoc) {
 		String theValue = null;
-		if (dDoc==null || xPathExpression == null)
-		{
-			logger.info("ERROR, unexpected null encountered, dDoc={}, xPathExpression={}",dDoc,xPathExpression);
-		}
-		else
-		{	
+		if (dDoc == null || xPathExpression == null) {
+			logger.info("ERROR, unexpected null encountered, dDoc={}, xPathExpression={}", dDoc, xPathExpression);
+		} else {
 			try {
 				XPath xPath = XPathFactory.newInstance().newXPath();
 				Node node = (Node) xPath.evaluate(xPathExpression, dDoc, XPathConstants.NODE);
 				theValue = node.getNodeValue();
-				logger.info("xPathExpression ({}) returns {}",xPathExpression, theValue);
+				logger.info("xPathExpression ({}) returns {}", xPathExpression, theValue);
 			} catch (Exception e) {
-				logger.info("ERROR! Likely an invalid xPathExpression ({}) was supplied against xml document: {}",xPathExpression,dDoc);
+				logger.info("ERROR! Likely an invalid xPathExpression ({}) was supplied against xml document: {}", xPathExpression, dDoc);
 				e.printStackTrace();
 			}
 		}

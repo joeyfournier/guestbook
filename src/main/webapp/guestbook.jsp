@@ -228,7 +228,8 @@ else
 	<p>Sorry! This application requires a valid subscription and sign
 		on through AppDirect.</p>
 	<p>You must be a valid AppDirect user who has been assigned access to this application.</p>
-	<p>Please visit (or have your administrator visit) <a href="https://www.appdirect.com/account/apps/">AppDirect</a> to access this application. 
+	<p>Either login through your <a href="https://www.appdirect.com/myapps">AppDirect Applications</a> page, or</p>
+	<p>Please visit (or have your administrator visit) <a href="https://www.appdirect.com/account/apps/">AppDirect</a> to get access to this application. 
 	</p>
 	<%
 }
