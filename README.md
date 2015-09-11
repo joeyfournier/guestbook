@@ -11,16 +11,17 @@ I utilized Google App Engine as it was one of the recommended deploy platforms o
 
 Deployed to the internet:
 ========================
-Under the Appdirect user: Joey Fournier  (joey.fournier@wmode.com) product "Guestbook_Multi_User", I was able to buy, cancel, change, assign and unassign users and do SSO. Here are the deployment details:
+Under the Appdirect user: Joey Fournier  (joey.fournier@wmode.com) product "Guestbook_Multi_User", I was able to buy, cancel, change, assign and unassign users and do SSO. I couldn’t bring myself to pull the trigger on Publishing this “Guestbook” app! I wasn’t sure if anyone would be able to see this publically, and I didn’t want to unleash this Guestbook app that displays EVERYONE’S subscription information! :-)
+
+Here are the deployment details:
 
 Application URLs
 ----------------
 I used Google App Engine and Objectify to deploy the application and endpoints (configured for above).
-With the guestbook app, you will have access to a simple guest book which also shows ALL current (not just yours) subscription d/b entries, and it shows a debugging activity log which will has all the incoming xml (successfully signed) received from all endpoint urls that are hit. 
+With the guestbook app, you will have access to a simple guest book which also shows ALL current (not just yours) subscription d/b entries, and it shows a debugging activity log which will has all the incoming xml (successfully signed) received from all endpoint urls that are hit. I deployed a SSO version and a non-SSO version (accessible anytime by anyone) which is pretty much an exact replica except that it does not require SSO via AppDirect
 The Application URLs:
-Requires SSO: https://guestbook-1027.appspot.com/guestbook.jsp (see below for credentials to login)
-I also deployed a non-SSO version (accessible anytime by anyone) which is pretty much an exact replica except that it does not require SSO via AppDirect:
-Non-SSO: https://guestbook-1027.appspot.com/guestbook2.jsp, if you attempt to use the guestbook it may point you back to the SSO version, but you can just add the “2” to get full access.
+- Requires SSO: https://guestbook-1027.appspot.com/guestbook.jsp (see below for credentials to login)
+- Non-SSO: https://guestbook-1027.appspot.com/guestbook2.jsp, if you attempt to use the guestbook it may point you back to the SSO version, but you can just add the “2” to get full access.
 
 OpenID SSO endpoint
 -------------------
@@ -28,7 +29,7 @@ I deployed an OpenID SSO endpoint (ConsumerServlet.java) at:
 https://guestbook-1027.appspot.com/login
 I’ve created and assigned to the App a test user you can utilize if you wish to use for testing:
 greenhippo77@gmail.com
-p/w: <sent in email>
+p/w: (send in an email to Laura N.)
  (NOTE: currently there is no limit to a session so once a session is validated with a valid login, you need to hit the “AppDirect Logout” button on the app to invalidate your session and force a new login with AppDirect.)
 ConsumerServlet.java is basically openid4java's consumer servlet example modified to support SSO for the submitted guestbook application.
 
