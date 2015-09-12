@@ -53,10 +53,11 @@ HTTPS clone url: https://github.com/joeyfournier/guestbook.git
 Config file
 -----------
 The config file located in src/main/webapp/WEB-INF/HandleAppDirectServlet.properties contains the properties: 
-oauth.consumer.key = <oauthConsumerKey from AppDirect>
-oauth.consumer.secret = <oauthConsumerSecret from AppDirect> 
+- oauth.consumer.key = (oauthConsumerKey from AppDirect)
+- oauth.consumer.secret = (oauthConsumerSecret from AppDirect)
+
 And you can add the following property to successfully process the AppDirect example xml files (see below for local test to create a local subscription using this xml):
-process.stateless.flag = true
+- process.stateless.flag = true
 
 Building
 --------
